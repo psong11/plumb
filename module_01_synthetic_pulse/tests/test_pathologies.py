@@ -39,7 +39,7 @@ drift_schema          = P._answer_drift_schema          if USE_KEY else P.drift_
 def staged():
     """Clean events, run through pathologies 1-4 only. Your input."""
     chaos = P.Chaos()
-    ev = [dict(e) for e in generate_clean_events(n_sessions=1200, days=7, seed=7)]
+    ev = [dict(e) for e in generate_clean_events(n_sessions=3000, days=7, seed=7)]
     ev = P.apply_clock_skew(ev, chaos)
     ev = P.spoof_bot_identity(ev, chaos)
     ev = P.stamp_ingestion_time(ev, chaos)
@@ -176,7 +176,13 @@ def test_drop_eats_real_purchases(staged):
     """If no purchases die, Module 02 has no revenue gap to reconcile.
 
     This is the uncomfortable one. Your most valuable event is your most
-    fragile event. The test asserting that is on purpose.
+    fragile event, and there is a test asserting that on purpose.
+
+    (The fixture is deliberately large. At ~6% conversion and a ~5.5% trailing
+    drop rate you only expect a handful of lost purchases per thousand
+    sessions — small samples make this test flaky, which is its own small
+    lesson about rare-event metrics: your beacon-loss estimate is noisy until
+    you have a lot of days, and quoting it from one day is overconfident.)
     """
     ev, chaos = staged
     drop_beacons(ev, chaos)
