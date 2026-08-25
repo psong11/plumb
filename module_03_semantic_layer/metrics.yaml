@@ -1,0 +1,183 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  THE SEMANTIC LAYER                                                          ║
+# ║  Every business word Meridian Goods uses, defined in SQL, exactly once.       ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+#
+# This file is the product. Wallpaper rule 01.
+#
+# Not the agent. Not the dashboard. THIS. A yaml file that says what words mean,
+# in a language a machine can execute, versioned in git, with an owner's name
+# attached to every single one.
+#
+# Because here's what actually happens without it: marketing computes conversion
+# rate over sessions, finance computes it over unique visitors, merchandising
+# computes it over product-page views, all three are RIGHT for their purpose,
+# and the three numbers show up in the same deck and someone senior asks which
+# one is real and there is no answer. Six weeks disappear.
+#
+# An LLM does not fix that. An LLM makes it WORSE and faster, because now three
+# agents are confidently reporting three numbers with no way to tell they
+# disagree. The glossary has to exist first. The agent is a window onto it.
+#
+# ── THE RULES OF THIS FILE ───────────────────────────────────────────────────
+#   · `sql` is the ONLY place a metric is ever computed. No exceptions, ever.
+#     Not in a notebook, not in the dashboard, not in the agent's prompt.
+#   · `grain` says what one row means. Wrong grain = double counting.
+#   · `dimensions` is an ALLOWLIST. If it's not here, you cannot slice by it —
+#     which is how we stop an agent from inventing a join that fans out.
+#   · `owner` is a human. When two definitions conflict, a person decides.
+#   · `caveats` ride along into every answer. Rule 05.
+
+version: 1
+source_table: silver_events
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Dimensions you are allowed to slice by. The allowlist IS the safety rail.
+# ══════════════════════════════════════════════════════════════════════════════
+dimensions:
+  event_date:      {sql: "CAST(event_ts AS DATE)", type: date}
+  device:          {sql: "device", type: string}
+  membership_tier: {sql: "membership_tier", type: string}
+  category:        {sql: "category", type: string}
+  app_version:     {sql: "app_version", type: string}
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Filters applied to EVERY metric unless explicitly waived.
+# ══════════════════════════════════════════════════════════════════════════════
+default_filters:
+  exclude_bots:
+    sql: "NOT is_suspected_bot"
+    why: >
+      Bots are ~6% of sessions but ~30% of events. Leaving them in inflates every
+      denominator and deflates every rate. Waivable — infra genuinely wants the
+      raw number for capacity planning — but never silently.
+  closed_days_only:
+    sql: "NOT arrived_after_watermark"
+    why: >
+      Events past the 72h lateness budget are excluded so closed days stop moving.
+      This is a policy, not a fact. See module 02's watermark.
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  THE METRICS
+# ══════════════════════════════════════════════════════════════════════════════
+metrics:
+
+  sessions:
+    label: Sessions
+    grain: session
+    owner: web-analytics
+    sql: "COUNT(DISTINCT derived_session_id)"
+    description: >
+      Server-derived sessions: a visitor's activity split on 30 minutes of
+      inactivity.
+    caveats:
+      - "The 30-minute timeout is inherited from Urchin (2005) and is arbitrary.
+         A 35-minute research session counts as two."
+      - "Server-derived. Differs from the app's own session_id by ~0.5%."
+
+  client_sessions:
+    label: Sessions (client-reported)
+    grain: session
+    owner: mobile-platform
+    sql: "COUNT(DISTINCT session_id)"
+    description: >
+      The app's own session id. Kept ON PURPOSE as a second, differently-owned
+      definition — this is what a real conflict looks like when you write it down
+      instead of arguing about it.
+    caveats:
+      - "Controlled by the mobile team's release cycle, not by data. It changes
+         when they change it, and you find out afterwards."
+    conflicts_with: [sessions]
+
+  visitors:
+    label: Unique visitors
+    grain: visitor
+    owner: web-analytics
+    sql: "COUNT(DISTINCT visitor_id)"
+    description: "Distinct devices, not distinct humans."
+    caveats:
+      - "A DEVICE, not a person. One human with a phone and a laptop is two.
+         Two people sharing a tablet are one. There is no identity graph here."
+
+  pageviews:
+    label: Pageviews
+    grain: event
+    owner: web-analytics
+    sql: "COUNT(*) FILTER (WHERE event_name = 'page_view')"
+    caveats:
+      - "Most bot-sensitive metric in the file. With bots included this roughly
+         doubles."
+
+  orders:
+    label: Orders
+    grain: order
+    owner: finance
+    sql: "COUNT(DISTINCT order_id)"
+    caveats:
+      - "Clickstream-side orders. Systematically UNDERCOUNTS versus the order
+         service, because the purchase beacon is the last event of a session and
+         loses the race with page unload. Reconcile before anyone quotes it."
+
+  revenue:
+    label: Revenue
+    grain: order
+    owner: finance
+    sql: "SUM(order_total) FILTER (WHERE event_name = 'purchase')"
+    caveats:
+      - "Site-observed, not booked. Excludes returns, cancellations, tax, and any
+         order whose beacon never fired. NOT a financial figure. Finance's
+         general ledger is the system of record and it will not match this."
+
+  conversion_rate_sessions:
+    label: Conversion rate (order / session)
+    grain: session
+    owner: web-analytics
+    sql: >
+      COUNT(DISTINCT CASE WHEN event_name = 'purchase'
+                          THEN derived_session_id END)
+      * 1.0 / NULLIF(COUNT(DISTINCT derived_session_id), 0)
+    description: "Share of sessions containing a purchase. The default."
+    caveats:
+      - "Single-session. A researcher who compares TVs over four visits and buys
+         on the fifth scores four failures and one success."
+      - "Moves for days after a day 'closes' — late-arriving events are
+         disproportionately end-of-funnel. See module 02's restatement demo."
+    conflicts_with: [conversion_rate_visitors]
+
+  conversion_rate_visitors:
+    label: Conversion rate (order / visitor)
+    grain: visitor
+    owner: finance
+    sql: >
+      COUNT(DISTINCT CASE WHEN event_name = 'purchase' THEN visitor_id END)
+      * 1.0 / NULLIF(COUNT(DISTINCT visitor_id), 0)
+    description: >
+      Finance's version. Denominator is devices, not sessions, so it reads
+      HIGHER than the session version. Both are correct. They answer different
+      questions and they will both be in the same deck someday.
+    caveats:
+      - "Not comparable to conversion_rate_sessions. Different denominator.
+         Never put them on the same axis."
+    conflicts_with: [conversion_rate_sessions]
+
+  aov:
+    label: Average order value
+    grain: order
+    owner: finance
+    sql: >
+      SUM(order_total) FILTER (WHERE event_name = 'purchase')
+      / NULLIF(COUNT(DISTINCT order_id), 0)
+    caveats:
+      - "Inherits every caveat on `revenue` and `orders`."
+
+  add_to_cart_rate:
+    label: Add-to-cart rate
+    grain: session
+    owner: merchandising
+    sql: >
+      COUNT(DISTINCT CASE WHEN event_name = 'add_to_cart'
+                          THEN derived_session_id END)
+      * 1.0 / NULLIF(COUNT(DISTINCT derived_session_id), 0)
+    caveats:
+      - "Cart adds fire mid-session, so this is far less distorted by late data
+         than conversion rate is. Useful as a same-day leading indicator."
