@@ -20,6 +20,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     args = ap.parse_args()
 
+    validate = C.validate_spec
+    compile_ = C.compile_spec
+    resolve  = C.resolve_metric
+
     layer = C.load_semantic_layer()
     con = connect()
 

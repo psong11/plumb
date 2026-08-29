@@ -48,37 +48,36 @@ python -m venv .venv && source .venv/bin/activate && pip install -r requirements
 ```
 
 ```bash
-python -m module_01_synthetic_pulse.run --answers && python -m module_02_bronze_to_silver.run --answers && python -m module_03_semantic_layer.run --answers
+python -m module_01_synthetic_pulse.run && python -m module_02_bronze_to_silver.run && python -m module_03_semantic_layer.run
 ```
 
-`--answers` runs the reference implementations so you can see the destination before you
-walk there. Drop the flag and the stubs raise — that's your homework. Grade yourself:
+Then the charts — some of this is only visible as a distribution:
+
+```bash
+python -m module_01_synthetic_pulse.charts && python -m module_02_bronze_to_silver.charts && python -m module_03_semantic_layer.charts
+```
 
 ```bash
 pytest -q
 ```
 
-## How the exercises work
+## How to read it
 
-Each module has spec blocks with the traps called out, and a folded answer key beneath:
+Everything is implemented and runnable — this is a repo you **read and interrogate**, not
+one you fill in. Each module's README lists the files in reading order. The commentary
+lives in the code on purpose: traps are named where they happen, and every non-obvious
+choice carries a `# DECISION:` note explaining why it went that way.
 
 ```python
-# ╭─ SPEC ──────────────────────────────────────────────────────────
-# │ WRITE   deduplicate(df, manifest) -> DataFrame
-# │ DO      one row per event_id; keep the EARLIEST ingested_at.
-# │ TRAP    not `.drop_duplicates()` alone — that keeps whatever row
-# │         happens to be first in the current sort order, which is
-# │         subtly wrong on a re-run.
-# ╰─────────────────────────────────────────────────────────────────
-def deduplicate(df, manifest):
-    raise NotImplementedError("kafka said AT LEAST once and it meant it.")
-
-# region 🔒 ANSWER KEY — fold me
-...
-# endregion
+    # DECISION: keep first-seen. A duplicate is by definition identical in
+    # payload, so the only thing the later copy adds is a later ingested_at —
+    # which would poison the watermark and make re-runs non-reproducible.
+    out = (df.sort_values("ingested_at", kind="mergesort")
+             .drop_duplicates(subset="event_id", keep="first"))
 ```
 
-**⌘K ⌘0** folds every answer key in a file at once. Do that the moment you open one.
+Read the tests too, and read only their docstrings. A test suite is the one piece of
+documentation that cannot lie, because it runs.
 
 ## Why synthetic data
 

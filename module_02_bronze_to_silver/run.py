@@ -36,6 +36,12 @@ def main() -> None:
     if not BRONZE.exists():
         sys.exit("no bronze data — run: python -m module_01_synthetic_pulse.run")
 
+    quarantine = S.quarantine_impossible_timestamps
+    dedupe     = S.deduplicate
+    drift      = S.resolve_schema_drift
+    bots       = S.classify_bots
+    sess       = S.sessionize
+
     df = pd.read_parquet(BRONZE)
     m = S.Manifest(rows_in=len(df))
 

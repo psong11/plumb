@@ -1,18 +1,18 @@
 {
-  "rows_in": 72803,
-  "rows_out": 71486,
-  "quarantined_timestamps": 229,
-  "duplicates_removed": 1088,
-  "drifted_rows_recovered": 1968,
+  "rows_in": 72777,
+  "rows_out": 71361,
+  "quarantined_timestamps": 332,
+  "duplicates_removed": 1084,
+  "drifted_rows_recovered": 2050,
   "bot_events_flagged": 20917,
   "bot_sessions_flagged": 493,
-  "sessions_derived": 7861,
-  "events_after_watermark": 19,
+  "sessions_derived": 7858,
+  "events_after_watermark": 29,
   "notes": [
-    "229 events had impossible timestamps (173 pre-launch, 56 future-dated)",
-    "dedup removed 1088 rows (1.50% of input) \u2014 watch this rate",
-    "\u26a0\ufe0f  UNMANAGED SCHEMA CHANGE: 1968 events sent `item_id` instead of `product_id`. app_version=['2.4.0'], first seen 2026-08-20 16:25. Silver healed it via coalesce, but the producer contract is broken and every consumer reading product_id directly is silently dropping these rows.",
-    "sessionization: client said 7,906 sessions, server-derived 7,861 (-0.6%). Neither is wrong. They answer different questions.",
-    "19 events arrived beyond the 72h lateness budget and are excluded from closed days. Affected dates: {datetime.date(2026, 8, 24): 7, datetime.date(2026, 8, 21): 6, datetime.date(2026, 8, 19): 6}. These are REAL user actions we are choosing to discard. That is a business decision, not a bug \u2014 but somebody should be told it exists."
+    "332 events had impossible timestamps (290 pre-launch, 42 future-dated)",
+    "dedup removed 1084 rows (1.50% of input) \u2014 watch this rate",
+    "\u26a0\ufe0f  UNMANAGED SCHEMA CHANGE: 2050 events sent `item_id` instead of `product_id`. app_version=['2.4.0'], first seen 2026-08-24 16:38. Silver healed it via coalesce, but the producer contract is broken and every consumer reading product_id directly is silently dropping these rows.",
+    "sessionization: client said 7,904 sessions, server-derived 7,858 (-0.6%). Neither is wrong. They answer different questions.",
+    "29 events arrived beyond the 72h lateness budget and are excluded from closed days. Affected dates: {datetime.date(2026, 8, 29): 16, datetime.date(2026, 8, 23): 7, datetime.date(2026, 8, 28): 6}. These are REAL user actions we are choosing to discard. That is a business decision, not a bug \u2014 but somebody should be told it exists."
   ]
 }
