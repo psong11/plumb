@@ -1,8 +1,7 @@
 """
 Module 01 runner.
 
-    python -m module_01_synthetic_pulse.run --answers      # see the destination
-    python -m module_01_synthetic_pulse.run                # your own code
+    python -m module_01_synthetic_pulse.run
     python -m module_01_synthetic_pulse.run --sessions 20000 --days 14
 
 Writes data/bronze_events.parquet — the raw, unretouched, deeply cursed event
@@ -90,12 +89,10 @@ def main() -> None:
     ap.add_argument("--sessions", type=int, default=8000)
     ap.add_argument("--days", type=int, default=14)
     ap.add_argument("--seed", type=int, default=11)
-    ap.add_argument("--answers", action="store_true",
-                    help="use the reference implementations for 5-7")
     args = ap.parse_args()
 
     clean = generate_clean_events(n_sessions=args.sessions, days=args.days, seed=args.seed)
-    dirty = corrupt([dict(e) for e in clean], Chaos(), use_answers=args.answers)
+    dirty = corrupt([dict(e) for e in clean], Chaos())
 
     df = pd.DataFrame(dirty).sort_values("ingested_at").reset_index(drop=True)
     OUT.parent.mkdir(parents=True, exist_ok=True)

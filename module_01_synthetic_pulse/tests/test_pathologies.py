@@ -1,20 +1,23 @@
 """
-Your grader.
+What the pipeline actually promises, in executable form.
 
-    pytest module_01_synthetic_pulse -q                 # grade YOUR code
-    PLUMB_ANSWERS=1 pytest module_01_synthetic_pulse -q # sanity-check the keys
+    pytest module_01_synthetic_pulse -q
 
-These tests exist so you never have to ask me "is this right?" — you can find
-out in 400ms. That matters more than it sounds. The thing that kills a
-build-to-learn project is a stall, and "I think this is done but I'm not sure"
-is a stall. Run the tests, get a red or a green, keep moving.
+READ THIS FILE. Seriously — a test suite is the only documentation that
+cannot lie, because it runs. Prose comments drift the moment someone edits the
+code; a test that drifts turns red.
 
-Each test says WHY it exists, not just what it asserts. If a test fails, read
-its docstring first — it usually tells you exactly which trap you hit.
+So when you want to know what a function actually guarantees — not what its
+docstring claims — you read its tests. Each one below names WHY it exists, not
+just what it asserts. That "why" is the design decision, written down in the
+one place it can never rot.
+
+This is the single highest-leverage reading habit for someone reviewing code
+they didn't write: skip the implementation, read the tests, and you know the
+contract in ninety seconds.
 """
 from __future__ import annotations
 
-import os
 import sys
 from collections import defaultdict
 from datetime import timedelta
@@ -28,11 +31,11 @@ from meridian.world import DEVICES
 from module_01_synthetic_pulse.generator import generate_clean_events
 from module_01_synthetic_pulse import pathologies as P
 
-USE_KEY = os.environ.get("PLUMB_ANSWERS") == "1"
+buffer_offline_events = P.buffer_offline_events
+drop_beacons = P.drop_beacons
+drift_schema = P.drift_schema
 
-buffer_offline_events = P._answer_buffer_offline_events if USE_KEY else P.buffer_offline_events
-drop_beacons          = P._answer_drop_beacons          if USE_KEY else P.drop_beacons
-drift_schema          = P._answer_drift_schema          if USE_KEY else P.drift_schema
+
 
 
 @pytest.fixture
@@ -251,7 +254,7 @@ def test_drift_adoption_is_sticky_per_visitor(staged):
 def test_full_corruption_pipeline_runs():
     """All seven, in order, without exploding. Green here = Module 01 done."""
     clean = [dict(e) for e in generate_clean_events(n_sessions=600, days=5, seed=3)]
-    out = P.corrupt(clean, P.Chaos(), use_answers=USE_KEY)
+    out = P.corrupt(clean, P.Chaos())
     assert out
     cols = set(out[0])
     assert {"event_id", "event_ts", "ingested_at", "item_id", "_true_ts"} <= cols

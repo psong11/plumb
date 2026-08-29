@@ -99,7 +99,7 @@ class Manifest:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  1 · QUARANTINE IMPOSSIBLE TIMESTAMPS                              ← YOUR TURN
+#  1 · QUARANTINE IMPOSSIBLE TIMESTAMPS
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  Start here because it's the cheapest and because if you skip it, everything
@@ -120,13 +120,13 @@ class Manifest:
 #  your silver job, those rows evaporate and you never learn anything. A filter
 #  hides the incident. A quarantine table *reports* it.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   quarantine_impossible_timestamps(df, manifest) -> (clean, quarantined)
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREdf, manifest
 # │
 # │ IN      df         bronze DataFrame with `event_ts` and `ingested_at`
 # │         manifest   a Manifest — mutate it, don't return it
 # │
-# │ DO      A row is IMPOSSIBLE if either:
+# │ DOES    A row is IMPOSSIBLE if either:
 # │           · event_ts < PLAUSIBLE_START, or
 # │           · event_ts > ingested_at + FUTURE_TOLERANCE
 # │         (that second one is lovely — you cannot receive a thing before it
@@ -144,11 +144,6 @@ class Manifest:
 # │         comparing tz-naive and tz-aware, that's your bug, not pandas'.
 # ╰──────────────────────────────────────────────────────────────────────────────
 def quarantine_impossible_timestamps(df: pd.DataFrame, manifest: Manifest):
-    raise NotImplementedError("1970 is not a Tuesday.")
-
-
-# region 🔒 ANSWER KEY 01
-def _answer_quarantine(df: pd.DataFrame, manifest: Manifest):
     df = df.copy()
     too_old = df["event_ts"] < PLAUSIBLE_START
     too_new = df["event_ts"] > df["ingested_at"] + FUTURE_TOLERANCE
@@ -163,11 +158,10 @@ def _answer_quarantine(df: pd.DataFrame, manifest: Manifest):
             f"{manifest.quarantined_timestamps} events had impossible timestamps "
             f"({int(too_old.sum())} pre-launch, {int(too_new.sum())} future-dated)")
     return df[~bad].reset_index(drop=True), q.reset_index(drop=True)
-# endregion
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  2 · DEDUPLICATE                                                   ← YOUR TURN
+#  2 · DEDUPLICATE         
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  You already know the mechanic: group by event_id, keep one. Ten minutes.
@@ -193,24 +187,17 @@ def _answer_quarantine(df: pd.DataFrame, manifest: Manifest):
 #  producer bugs. A retry storm shows up in the dedup rate hours before it shows
 #  up anywhere a human would look.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   deduplicate(df, manifest) -> DataFrame
-# │ DO      one row per event_id; keep the row with the EARLIEST ingested_at.
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREdf, manifest
+# │ DOES    one row per event_id; keep the row with the EARLIEST ingested_at.
 # │         set manifest.duplicates_removed.
 # │ OUT     DataFrame, sorted by ingested_at, index reset.
 # │ TRAP 1  Not `.drop_duplicates("event_id")` alone — that keeps whatever row
 # │         happens to be first in the current sort order, which is not the same
 # │         thing as first-seen and will be subtly wrong on a re-run.
 # │ TRAP 2  Triple deliveries exist. Do not assume pairs.
-# │ HINT    sort, then drop_duplicates(keep="first"). Two lines. The thinking is
-# │         the deliverable, not the code.
 # ╰──────────────────────────────────────────────────────────────────────────────
 def deduplicate(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
-    raise NotImplementedError("kafka said AT LEAST once and it meant it.")
-
-
-# region 🔒 ANSWER KEY 02
-def _answer_deduplicate(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
     before = len(df)
     # DECISION: keep first-seen. A duplicate is by definition identical in
     # payload, so the only thing the later copy adds is a later ingested_at —
@@ -223,11 +210,10 @@ def _answer_deduplicate(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
         f"dedup removed {manifest.duplicates_removed} rows "
         f"({(before - len(out)) / max(before,1):.2%} of input) — watch this rate")
     return out
-# endregion
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  3 · RESOLVE SCHEMA DRIFT                                          ← YOUR TURN
+#  3 · RESOLVE SCHEMA DRIFT
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  Someone shipped app 2.4.0 and renamed product_id → item_id.
@@ -245,9 +231,9 @@ def _answer_deduplicate(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
 #  schema registry eventually gets funded. Wallpaper rule 07 — you cannot fix
 #  this downstream, you can only make it impossible to ignore.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   resolve_schema_drift(df, manifest) -> DataFrame
-# │ DO      1. new column `sku` = product_id, falling back to item_id.
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREdf, manifest
+# │ DOES    1. new column `sku` = product_id, falling back to item_id.
 # │         2. count how many rows were rescued FROM item_id → manifest
 # │            .drifted_rows_recovered
 # │         3. if any drift: append a manifest note naming the app_version(s)
@@ -260,11 +246,6 @@ def _answer_deduplicate(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
 # │         null and not the string "None" after a parquet round-trip.
 # ╰──────────────────────────────────────────────────────────────────────────────
 def resolve_schema_drift(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
-    raise NotImplementedError("coalesce is the easy half. shouting is the point.")
-
-
-# region 🔒 ANSWER KEY 03
-def _answer_resolve_schema_drift(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
     df = df.copy()
     if "item_id" not in df.columns:
         df["item_id"] = None
@@ -286,11 +267,10 @@ def _answer_resolve_schema_drift(df: pd.DataFrame, manifest: Manifest) -> pd.Dat
             f"but the producer contract is broken and every consumer reading "
             f"product_id directly is silently dropping these rows.")
     return df
-# endregion
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  4 · CLASSIFY BOTS                                                 ← YOUR TURN
+#  4 · CLASSIFY BOTS       
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  My favorite exercise in the repo, because you get a SCORE at the end and the
@@ -321,9 +301,9 @@ def _answer_resolve_schema_drift(df: pd.DataFrame, manifest: Manifest) -> pd.Dat
 #  DO NOT READ `_is_bot` IN THIS FUNCTION. The guard will catch you. More
 #  importantly, you'll catch yourself, and it'll feel bad, and it should.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   classify_bots(df, manifest) -> DataFrame
-# │ DO      Add a boolean column `is_suspected_bot`, constant within a session.
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREdf, manifest
+# │ DOES    Add a boolean column `is_suspected_bot`, constant within a session.
 # │         Build session-level features from `event_ts` and event counts, e.g.:
 # │           median_gap   median seconds between consecutive events
 # │           gap_stdev    std-dev of those gaps  (low = metronomic = robot)
@@ -340,11 +320,6 @@ def _answer_resolve_schema_drift(df: pd.DataFrame, manifest: Manifest) -> pd.Dat
 # │         a customer. (Yes, really. Write the comment.)
 # ╰──────────────────────────────────────────────────────────────────────────────
 def classify_bots(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
-    raise NotImplementedError("it says it's a MacBook. it views 40 pages a minute.")
-
-
-# region 🔒 ANSWER KEY 04
-def _answer_classify_bots(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
     df = df.sort_values(["session_id", "event_ts"], kind="mergesort").copy()
     gaps = df.groupby("session_id")["event_ts"].diff().dt.total_seconds()
     df["_gap"] = gaps
@@ -378,11 +353,10 @@ def _answer_classify_bots(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
     manifest.bot_events_flagged = int(df["is_suspected_bot"].sum())
     manifest.bot_sessions_flagged = int(suspect.sum())
     return df.reset_index(drop=True)
-# endregion
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  5 · SESSIONIZE                                                    ← YOUR TURN
+#  5 · SESSIONIZE          
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  Bronze already has a session_id. The app generated it. Why are you rebuilding it?
@@ -413,9 +387,9 @@ def _answer_classify_bots(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
 #  differently. Your job is not to be right. Your job is to make the choice
 #  explicit, versioned, and singular.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   sessionize(df, manifest, timeout_minutes=SESSION_TIMEOUT_MINUTES)
-# │ DO      Add `derived_session_id`. Within each visitor_id, ordered by
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREdf, manifest, timeout_minutes=SESSION_TIMEOUT_MINUTES
+# │ DOES    Add `derived_session_id`. Within each visitor_id, ordered by
 # │         event_ts, start a new session whenever the gap from the previous
 # │         event exceeds timeout_minutes. Make the id stable and readable:
 # │           f"{visitor_id}:{session_start_epoch}"
@@ -424,20 +398,12 @@ def _answer_classify_bots(df: pd.DataFrame, manifest: Manifest) -> pd.DataFrame:
 # │ TRAP 1  Partition by VISITOR, not session. You're deliberately ignoring the
 # │         client's session boundaries — that's the whole exercise.
 # │ TRAP 2  The first event of a visitor has a NaT gap. That's a session start.
-# │ HINT    classic pattern: gap > timeout → boolean → .cumsum() within group
-# │         gives you a session ordinal. Then map ordinal → start timestamp.
-# │ AFTER   Compare your count to df.session_id.nunique(). They will NOT match.
+# │ TRY     Compare your count to df.session_id.nunique(). They will NOT match.
 # │         Go find one visitor where they disagree and read their event log
 # │         line by line until you understand why. That five minutes is worth
 # │         more than the function.
 # ╰──────────────────────────────────────────────────────────────────────────────
 def sessionize(df: pd.DataFrame, manifest: Manifest,
-               timeout_minutes: int = SESSION_TIMEOUT_MINUTES) -> pd.DataFrame:
-    raise NotImplementedError("30 minutes. chosen in 2005. by nobody you can name.")
-
-
-# region 🔒 ANSWER KEY 05
-def _answer_sessionize(df: pd.DataFrame, manifest: Manifest,
                        timeout_minutes: int = SESSION_TIMEOUT_MINUTES) -> pd.DataFrame:
     df = df.sort_values(["visitor_id", "event_ts"], kind="mergesort").copy()
     gap = df.groupby("visitor_id")["event_ts"].diff()
@@ -457,11 +423,10 @@ def _answer_sessionize(df: pd.DataFrame, manifest: Manifest,
         f"({manifest.sessions_derived / max(client_sessions,1) - 1:+.1%}). "
         f"Neither is wrong. They answer different questions.")
     return df.reset_index(drop=True)
-# endregion
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  6 · APPLY WATERMARK                                                   (worked)
+#  6 · APPLY WATERMARK
 # ══════════════════════════════════════════════════════════════════════════════
 def apply_watermark(df: pd.DataFrame, manifest: Manifest,
                     lateness_hours: float = 72.0) -> pd.DataFrame:

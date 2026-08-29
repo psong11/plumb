@@ -1,7 +1,5 @@
 """
 Module 02 runner.
-
-    python -m module_02_bronze_to_silver.run --answers
     python -m module_02_bronze_to_silver.run
 
 Reads data/bronze_events.parquet, writes data/silver_events.parquet and
@@ -32,18 +30,11 @@ MANIFEST = ROOT / "data" / "quality_manifest.json"
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--answers", action="store_true")
     ap.add_argument("--lateness-hours", type=float, default=72.0)
     args = ap.parse_args()
 
     if not BRONZE.exists():
-        sys.exit("no bronze data — run: python -m module_01_synthetic_pulse.run --answers")
-
-    quarantine = S._answer_quarantine            if args.answers else S.quarantine_impossible_timestamps
-    dedupe     = S._answer_deduplicate           if args.answers else S.deduplicate
-    drift      = S._answer_resolve_schema_drift  if args.answers else S.resolve_schema_drift
-    bots       = S._answer_classify_bots         if args.answers else S.classify_bots
-    sess       = S._answer_sessionize            if args.answers else S.sessionize
+        sys.exit("no bronze data — run: python -m module_01_synthetic_pulse.run")
 
     df = pd.read_parquet(BRONZE)
     m = S.Manifest(rows_in=len(df))

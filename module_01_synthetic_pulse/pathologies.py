@@ -24,29 +24,27 @@ You are building the answer key to your own exam. That's the whole trick.
 ┌────────────────────────────────────────────────────────────────────────────┐
 │  THE SEVEN PATHOLOGIES                                                     │
 │                                                                            │
-│  I wrote 1–4. You write 5–7. Read mine first — not to be polite, but        │
-│  because 5 literally depends on the column that 2 creates.                  │
+│  Read them in order. 5 depends on a column 2 creates, and 6 only makes      │
+│  sense once you've seen what 1 does to a session's tail.                    │
 │                                                                            │
 │   1. deliver_at_least_once   Kafka hands you the same event twice.          │
 │   2. stamp_ingestion_time    The clock that isn't the event's clock.        │
 │   3. apply_clock_skew        Devices lie about what time it is.             │
 │   4. spoof_bot_identity      The scraper says it's a MacBook.               │
-│  ─────────────────────────────────────────────────────────────────────     │
-│   5. buffer_offline_events   ← YOU.  The parking-garage phone.              │
-│   6. drop_beacons            ← YOU.  The events that never arrive.          │
-│   7. drift_schema            ← YOU.  A bad app release renames a field.     │
+│   5. buffer_offline_events   The parking-garage phone.                      │
+│   6. drop_beacons            The events that never arrive at all.           │
+│   7. drift_schema            A bad app release renames a field.             │
 └────────────────────────────────────────────────────────────────────────────┘
 
-HOW THE "YOUR TURN" BLOCKS WORK
-    Each one has a spec box, a stub that raises, and a folded ANSWER KEY below.
+WHERE TO START
+    `Chaos` right below this — it's every knob in one place with the reasoning
+    next to each number. Then read the seven in order. Then `corrupt()` at the
+    bottom, which is the only place the ordering is enforced and is the single
+    most important twelve lines in the file.
 
-    ⌘K ⌘0   fold every region in this file  ← do this the second you open it
-    ⌘K ⌘J   unfold everything (surrender)
-
-    And you can run the FULL pipeline before you've written a thing:
-        python -m module_01_synthetic_pulse.run --answers
-    That uses my implementations so you can see where you're headed. Then drop
-    the flag and make your own pass the tests. Momentum > purity.
+WHAT TO RUN
+    python -m module_01_synthetic_pulse.run
+    python -m module_01_synthetic_pulse.charts
 """
 
 from __future__ import annotations
@@ -115,7 +113,7 @@ class Chaos:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  1 · DELIVER AT LEAST ONCE                                            (worked)
+#  1 · DELIVER AT LEAST ONCE
 # ══════════════════════════════════════════════════════════════════════════════
 def deliver_at_least_once(events: list[dict], chaos: Chaos) -> list[dict]:
     """Kafka's actual guarantee, honestly implemented.
@@ -159,7 +157,7 @@ def deliver_at_least_once(events: list[dict], chaos: Chaos) -> list[dict]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  2 · STAMP INGESTION TIME                                             (worked)
+#  2 · STAMP INGESTION TIME
 # ══════════════════════════════════════════════════════════════════════════════
 def stamp_ingestion_time(events: list[dict], chaos: Chaos) -> list[dict]:
     """Add `ingested_at` — the second clock, and the one you can trust.
@@ -204,7 +202,7 @@ def stamp_ingestion_time(events: list[dict], chaos: Chaos) -> list[dict]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  3 · APPLY CLOCK SKEW                                                 (worked)
+#  3 · APPLY CLOCK SKEW 
 # ══════════════════════════════════════════════════════════════════════════════
 def apply_clock_skew(events: list[dict], chaos: Chaos) -> list[dict]:
     """Some devices think it's a different time than it is. Some by a LOT.
@@ -247,7 +245,7 @@ def apply_clock_skew(events: list[dict], chaos: Chaos) -> list[dict]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  4 · SPOOF BOT IDENTITY                                               (worked)
+#  4 · SPOOF BOT IDENTITY
 # ══════════════════════════════════════════════════════════════════════════════
 def spoof_bot_identity(events: list[dict], chaos: Chaos) -> list[dict]:
     """Make the bots stop announcing themselves.
@@ -305,7 +303,7 @@ def spoof_bot_identity(events: list[dict], chaos: Chaos) -> list[dict]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  5 · BUFFER OFFLINE EVENTS                                          ← YOUR TURN
+#  5 · BUFFER OFFLINE EVENTS
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  Remember when I told you dedup was the whole game? I lied. Well — I let you
@@ -331,14 +329,14 @@ def spoof_bot_identity(events: list[dict], chaos: Chaos) -> list[dict]:
 #  answer "how long do I wait for stragglers before I'm allowed to call a day
 #  done?" You'll build one in Module 02. Tonight you build the straggler.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   buffer_offline_events(events, chaos) -> list[dict]
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREevents, chaos
 # │
 # │ IN      events   list of dicts, each already having `ingested_at`
 # │                  (so this MUST run after stamp_ingestion_time)
 # │         chaos    .offline_session_rate, .offline_flush_hours, .seed
 # │
-# │ DO      1. Find candidate sessions: only devices where
+# │ DOES    1. Find candidate sessions: only devices where
 # │            DEVICES[device]["can_buffer_offline"] is True. Web can't buffer.
 # │            It just dies. Only `app` qualifies.
 # │         2. Roll per SESSION (not per event) at chaos.offline_session_rate.
@@ -358,15 +356,8 @@ def spoof_bot_identity(events: list[dict], chaos: Chaos) -> list[dict]:
 # │ TRAP 3  Group events by session_id first. Iterating the flat sorted list and
 # │         deciding per-row cannot produce a coherent "session went dark."
 # │
-# │ HINT    collections.defaultdict(list) to group; the events are already in
-# │         timestamp order within a session, so index math works fine.
 # ╰──────────────────────────────────────────────────────────────────────────────
 def buffer_offline_events(events: list[dict], chaos: Chaos) -> list[dict]:
-    raise NotImplementedError("the phone is in the tunnel. go get it.")
-
-
-# region 🔒 ANSWER KEY 05 — fold me (⌘K ⌘0)
-def _answer_buffer_offline_events(events: list[dict], chaos: Chaos) -> list[dict]:
     from collections import defaultdict
     rng = random.Random(chaos.seed + 5)
 
@@ -385,11 +376,10 @@ def _answer_buffer_offline_events(events: list[dict], chaos: Chaos) -> list[dict
             e["ingested_at"] += delay
             e["_was_buffered"] = True
     return events
-# endregion
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  6 · DROP BEACONS                                                   ← YOUR TURN
+#  6 · DROP BEACONS         
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  Pathology 5 was events arriving LATE. This one is events that never arrive.
@@ -421,10 +411,10 @@ def _answer_buffer_offline_events(events: list[dict], chaos: Chaos) -> list[dict
 #  can publish it, and once you can publish it your agent can carry it into the
 #  answer. Rule 05. It all connects.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   drop_beacons(events, chaos) -> list[dict]
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREevents, chaos
 # │
-# │ DO      Return a NEW list with some events removed.
+# │ DOES    Return a NEW list with some events removed.
 # │           · every event: drop with prob chaos.beacon_drop_rate
 # │           · the LAST event of each session: instead use
 # │             chaos.trailing_beacon_drop_rate (higher). Not both. The trailing
@@ -432,7 +422,7 @@ def _answer_buffer_offline_events(events: list[dict], chaos: Chaos) -> list[dict
 # │
 # │ OUT     a shorter list, original relative order preserved.
 # │
-# │ ALSO    Return-by-side-channel: set the module-level dict LOSS_LEDGER to
+# │ ALSO    Returns by side channel: sets the module-level dict LOSS_LEDGER to
 # │           {"dropped": n, "dropped_purchases": p, "kept": k}
 # │         Yes, a global is ugly. Do it anyway, and then ask yourself why it
 # │         feels bad. (Answer in Module 02: this wants to be a first-class
@@ -454,11 +444,6 @@ LOSS_LEDGER: dict = {}
 
 
 def drop_beacons(events: list[dict], chaos: Chaos) -> list[dict]:
-    raise NotImplementedError("some of these were never going to make it.")
-
-
-# region 🔒 ANSWER KEY 06 — fold me (⌘K ⌘0)
-def _answer_drop_beacons(events: list[dict], chaos: Chaos) -> list[dict]:
     from collections import defaultdict
     rng = random.Random(chaos.seed + 6)
 
@@ -487,11 +472,10 @@ def _answer_drop_beacons(events: list[dict], chaos: Chaos) -> list[dict]:
     LOSS_LEDGER.update({"dropped": dropped, "dropped_purchases": dropped_purchases,
                         "kept": len(kept)})
     return kept
-# endregion
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  7 · DRIFT SCHEMA                                                   ← YOUR TURN
+#  7 · DRIFT SCHEMA         
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  Last one, and it's the one that'll actually show up in your real job.
@@ -519,10 +503,10 @@ def _answer_drop_beacons(events: list[dict], chaos: Chaos) -> list[dict]:
 #  that detector in Module 02, which is genuinely one of the more satisfying
 #  things in this repo.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   drift_schema(events, chaos) -> list[dict]
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREevents, chaos
 # │
-# │ DO      1. Find the run's time window from `_true_ts` (min → max).
+# │ DOES    1. Find the run's time window from `_true_ts` (min → max).
 # │         2. drift_ts = min + (max - min) * chaos.drift_at_fraction
 # │         3. For events at/after drift_ts, on `app` devices only:
 # │            with prob chaos.drift_adoption_rate, this event came from an
@@ -544,11 +528,6 @@ def _answer_drop_beacons(events: list[dict], chaos: Chaos) -> list[dict]:
 # │         they just carry None in both columns. Don't special-case them.
 # ╰──────────────────────────────────────────────────────────────────────────────
 def drift_schema(events: list[dict], chaos: Chaos) -> list[dict]:
-    raise NotImplementedError("someone shipped 2.4.0 and did not tell you.")
-
-
-# region 🔒 ANSWER KEY 07 — fold me (⌘K ⌘0)
-def _answer_drift_schema(events: list[dict], chaos: Chaos) -> list[dict]:
     rng = random.Random(chaos.seed + 7)
     if not events:
         return events
@@ -572,13 +551,12 @@ def _answer_drift_schema(events: list[dict], chaos: Chaos) -> list[dict]:
             e["schema_version"] = "2.4.0"
             e["_drifted"] = True
     return events
-# endregion
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  THE ORCHESTRATOR — order is not negotiable
 # ══════════════════════════════════════════════════════════════════════════════
-def corrupt(events: list[dict], chaos: Chaos | None = None, use_answers: bool = False) -> list[dict]:
+def corrupt(events: list[dict], chaos: Chaos | None = None) -> list[dict]:
     """Run the seven pathologies in the only order that makes physical sense.
 
     Trace one event through this pipeline in your head before you run it:
@@ -597,15 +575,11 @@ def corrupt(events: list[dict], chaos: Chaos | None = None, use_answers: bool = 
     you ever debug will be one of them wearing a hat.
     """
     chaos = chaos or Chaos()
-    _buffer = _answer_buffer_offline_events if use_answers else buffer_offline_events
-    _drop   = _answer_drop_beacons          if use_answers else drop_beacons
-    _drift  = _answer_drift_schema          if use_answers else drift_schema
-
     events = apply_clock_skew(events, chaos)
-    events = _drift(events, chaos)
+    events = drift_schema(events, chaos)
     events = spoof_bot_identity(events, chaos)
     events = stamp_ingestion_time(events, chaos)
-    events = _buffer(events, chaos)
+    events = buffer_offline_events(events, chaos)
     events = deliver_at_least_once(events, chaos)
-    events = _drop(events, chaos)
+    events = drop_beacons(events, chaos)
     return events

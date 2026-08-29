@@ -93,7 +93,7 @@ def load_semantic_layer(path: Path = SPEC_PATH) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  1 · VALIDATE_SPEC                                                 ← YOUR TURN
+#  1 · VALIDATE_SPEC       
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  This function is your security boundary, your cost control, and your
@@ -113,10 +113,10 @@ def load_semantic_layer(path: Path = SPEC_PATH) -> dict:
 #  a petabyte is a four-figure query. Here you cap it, and the cap is a number in
 #  a config file that a human approved, not a vibe the model had.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   validate_spec(spec, layer) -> None   (raise SpecError, or return)
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREspec, layer
 # │
-# │ CHECK   1. spec.metric exists in layer["metrics"]. If not, raise with the
+# │ CHECKS  1. spec.metric exists in layer["metrics"]. If not, raise with the
 # │            list of valid metric names IN the message — the model reads it.
 # │         2. every dimension in spec.dimensions is in layer["dimensions"].
 # │         3. every key in spec.filters is a known dimension.
@@ -133,11 +133,6 @@ def load_semantic_layer(path: Path = SPEC_PATH) -> dict:
 # │         collecting all of them means one retry instead of four. (I collect.)
 # ╰──────────────────────────────────────────────────────────────────────────────
 def validate_spec(spec: MetricSpec, layer: dict) -> None:
-    raise NotImplementedError("the allowlist is the product.")
-
-
-# region 🔒 ANSWER KEY 01
-def _answer_validate_spec(spec: MetricSpec, layer: dict) -> None:
     metrics, dims = layer["metrics"], layer["dimensions"]
     defaults = layer.get("default_filters", {})
     problems: list[str] = []
@@ -167,11 +162,10 @@ def _answer_validate_spec(spec: MetricSpec, layer: dict) -> None:
 
     if problems:
         raise SpecError("; ".join(problems))
-# endregion
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  2 · COMPILE_SPEC                                                  ← YOUR TURN
+#  2 · COMPILE_SPEC        
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  Now the payoff. A validated spec becomes SQL, and the SQL is DETERMINISTIC —
@@ -190,10 +184,10 @@ def _answer_validate_spec(spec: MetricSpec, layer: dict) -> None:
 #  that's a definition, and definitions live in the semantic layer or they drift.
 #  Rule 03.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   compile_spec(spec, layer) -> str
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREspec, layer
 # │
-# │ BUILD   SELECT  <dim sql> AS <dim name>, ... , <metric sql> AS value
+# │ BUILDS  SELECT  <dim sql> AS <dim name>, ... , <metric sql> AS value
 # │         FROM    <source_table>
 # │         WHERE   <default filters not waived>
 # │           AND   event_ts >= / < date bounds   (if given)
@@ -211,15 +205,8 @@ def _answer_validate_spec(spec: MetricSpec, layer: dict) -> None:
 # │         trustworthy just because you wrote the prompt.
 # │         → return SQL with `?` placeholders; engine.py binds them in order.
 # │ TRAP 3  No dimensions = a single scalar row. Do NOT emit a bare GROUP BY.
-# │ HINT    return the SQL string; put the ordered param values on
-# │         spec._params (the engine looks for it). Ugly? A little. Ship it.
 # ╰──────────────────────────────────────────────────────────────────────────────
 def compile_spec(spec: MetricSpec, layer: dict) -> str:
-    raise NotImplementedError("spec in, deterministic SQL out.")
-
-
-# region 🔒 ANSWER KEY 02
-def _answer_compile_spec(spec: MetricSpec, layer: dict) -> str:
     metric = layer["metrics"][spec.metric]
     dims = layer["dimensions"]
     params: list = []
@@ -249,17 +236,24 @@ def _answer_compile_spec(spec: MetricSpec, layer: dict) -> str:
     if where:
         sql += "\nWHERE " + "\n  AND ".join(where)
     if spec.dimensions:
-        sql += "\nGROUP BY " + ", ".join(spec.dimensions)
-        sql += f"\nORDER BY {spec.dimensions[0]}"
+        # GROUP BY the EXPRESSION, not the alias. Looks pedantic; isn't.
+        # `event_date` is both a semantic-layer dimension AND a physical column
+        # that module 02's watermark step writes. `GROUP BY event_date` binds to
+        # the physical column, leaving CAST(event_ts AS DATE) in the SELECT
+        # ungrouped, and the query dies. Grouping by the expression is immune to
+        # every collision of this kind — and collisions of this kind are
+        # guaranteed the moment two teams name things independently.
+        exprs = [dims[d]["sql"] for d in spec.dimensions]
+        sql += "\nGROUP BY " + ", ".join(exprs)
+        sql += f"\nORDER BY {exprs[0]}"
     sql += f"\nLIMIT {int(spec.limit)}"
 
     spec._params = params  # type: ignore[attr-defined]
     return sql
-# endregion
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  3 · RESOLVE_METRIC                                                ← YOUR TURN
+#  3 · RESOLVE_METRIC      
 # ══════════════════════════════════════════════════════════════════════════════
 #
 #  Last one, and it's the least technical and the most important.
@@ -288,8 +282,8 @@ def _answer_compile_spec(spec: MetricSpec, layer: dict) -> str:
 #  arbiter of which is correct. It's to make the fork VISIBLE, assign it an
 #  owner, and make the choice explicit every time.
 #
-# ╭─ SPEC ───────────────────────────────────────────────────────────────────────
-# │ WRITE   resolve_metric(name, layer) -> dict
+# ╭─ HOW IT WORKS ───────────────────────────────────────────────────────────────────────
+# │ SIGNATUREname, layer
 # │
 # │ OUT     {
 # │           "resolved":    "<metric key you'd use>",
@@ -298,7 +292,7 @@ def _answer_compile_spec(spec: MetricSpec, layer: dict) -> str:
 # │           "message":     str | None   # human-readable, only when ambiguous
 # │         }
 # │
-# │ DO      1. exact key match → resolved, ambiguous only if it declares
+# │ DOES    1. exact key match → resolved, ambiguous only if it declares
 # │            `conflicts_with` (still list the alternatives!)
 # │         2. no exact match → fuzzy: match on label, or on any metric whose
 # │            key starts with the requested name. e.g. "conversion_rate" →
@@ -314,11 +308,6 @@ def _answer_compile_spec(spec: MetricSpec, layer: dict) -> str:
 # │         that will make an answer change between runs for no visible reason.
 # ╰──────────────────────────────────────────────────────────────────────────────
 def resolve_metric(name: str, layer: dict) -> dict:
-    raise NotImplementedError("three teams, three definitions, all correct.")
-
-
-# region 🔒 ANSWER KEY 03
-def _answer_resolve_metric(name: str, layer: dict) -> dict:
     metrics = layer["metrics"]
     n = name.strip().lower().replace(" ", "_")
 
@@ -365,4 +354,3 @@ def _answer_resolve_metric(name: str, layer: dict) -> dict:
 
     return {"resolved": resolved, "ambiguous": ambiguous,
             "candidates": candidates, "message": message}
-# endregion

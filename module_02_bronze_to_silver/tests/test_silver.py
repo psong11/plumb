@@ -1,20 +1,24 @@
 """
-Your grader for Module 02.
+The contract Module 02 actually guarantees.
 
     pytest module_02_bronze_to_silver -q
-    PLUMB_ANSWERS=1 pytest module_02_bronze_to_silver -q
 
 Needs data/bronze_events.parquet. Run Module 01 first.
 
-Note the last test in this file. It reads your source code and fails if your
-pipeline touches a ground-truth column. It is not being cute — label leakage is
-the most seductive bug in this entire discipline and it feels like success right
-up until production.
+Note the last test in this file. It reads the pipeline's own source and fails
+if any of it touches a ground-truth column. That is an unusual kind of test —
+it asserts on the CODE, not on the output — and it exists because label leakage
+is the most seductive bug in this discipline. Your filter hits 100%, you feel
+like a genius, and it does nothing in production because `_is_bot` was never a
+real column.
+
+Worth knowing that this kind of test exists. When you're reviewing a data or ML
+change, "could this have leaked the label?" is one of the three questions that
+catches the most real bugs.
 """
 from __future__ import annotations
 
 import inspect
-import os
 import sys
 from pathlib import Path
 
@@ -27,12 +31,12 @@ sys.path.insert(0, str(ROOT))
 from module_02_bronze_to_silver import silver as S
 from module_02_bronze_to_silver.quality import score_bot_filter
 
-USE_KEY = os.environ.get("PLUMB_ANSWERS") == "1"
-quarantine = S._answer_quarantine           if USE_KEY else S.quarantine_impossible_timestamps
-deduplicate = S._answer_deduplicate         if USE_KEY else S.deduplicate
-resolve_drift = S._answer_resolve_schema_drift if USE_KEY else S.resolve_schema_drift
-classify_bots = S._answer_classify_bots     if USE_KEY else S.classify_bots
-sessionize = S._answer_sessionize           if USE_KEY else S.sessionize
+quarantine = S.quarantine_impossible_timestamps
+deduplicate = S.deduplicate
+resolve_drift = S.resolve_schema_drift
+classify_bots = S.classify_bots
+sessionize = S.sessionize
+
 
 BRONZE = ROOT / "data" / "bronze_events.parquet"
 
@@ -40,7 +44,7 @@ BRONZE = ROOT / "data" / "bronze_events.parquet"
 @pytest.fixture(scope="module")
 def bronze():
     if not BRONZE.exists():
-        pytest.skip("run `python -m module_01_synthetic_pulse.run --answers` first")
+        pytest.skip("run `python -m module_01_synthetic_pulse.run` first")
     return pd.read_parquet(BRONZE)
 
 
@@ -203,7 +207,6 @@ def test_sessionize_respects_a_custom_timeout(bronze, m):
 
 
 # ── the guard ─────────────────────────────────────────────────────────────────
-@pytest.mark.skipif(USE_KEY, reason="grading your code, not mine")
 def test_no_ground_truth_leakage():
     """Read your source. Fail if the pipeline peeks at the answer key."""
     for fn in (S.quarantine_impossible_timestamps, S.deduplicate,

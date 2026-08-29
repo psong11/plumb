@@ -1,15 +1,13 @@
 """
-Your grader for Module 03.
+What the compiler guarantees, executably.
 
     pytest module_03_semantic_layer -q
-    PLUMB_ANSWERS=1 pytest module_03_semantic_layer -q
 
 The SQL-execution tests need data/silver_events.parquet; they skip without it.
 Everything else runs on the yaml alone.
 """
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -21,10 +19,10 @@ sys.path.insert(0, str(ROOT))
 from module_03_semantic_layer import compiler as C
 from module_03_semantic_layer.engine import SILVER, connect, execute, spec_hash
 
-USE_KEY = os.environ.get("PLUMB_ANSWERS") == "1"
-validate = C._answer_validate_spec  if USE_KEY else C.validate_spec
-compile_ = C._answer_compile_spec   if USE_KEY else C.compile_spec
-resolve  = C._answer_resolve_metric if USE_KEY else C.resolve_metric
+validate = C.validate_spec
+compile_ = C.compile_spec
+resolve = C.resolve_metric
+
 
 
 @pytest.fixture(scope="module")
@@ -128,7 +126,7 @@ def test_metric_sql_comes_from_the_yaml(layer):
     """If you typed an aggregate in compile_spec, that's a definition living
     outside the semantic layer, and it will drift. Rule 03."""
     import inspect
-    src = inspect.getsource(C.compile_spec if not USE_KEY else C._answer_compile_spec)
+    src = inspect.getsource(C.compile_spec)
     assert "COUNT(" not in src.upper().replace("COUNT(*)", ""), (
         "no aggregates in the compiler — definitions live in metrics.yaml")
 
@@ -174,12 +172,17 @@ def test_unknown_name_raises_with_options(layer):
 def test_compiled_sql_actually_runs(layer):
     con = connect()
     try:
+        # every metric against every dimension. This matrix is the point: the
+        # first version of this test only ever passed `device`, and it happily
+        # went green while `event_date` was broken — that dimension's alias
+        # collides with a physical column module 02 writes.
         for metric in layer["metrics"]:
-            spec = C.MetricSpec(metric=metric, dimensions=["device"])
-            validate(spec, layer)
-            ans = execute(spec, layer, compile_(spec, layer), con=con)
-            assert ans.rows
-            assert ans.query_hash
+            for dim in list(layer["dimensions"]) + [None]:
+                spec = C.MetricSpec(metric=metric, dimensions=[dim] if dim else [])
+                validate(spec, layer)
+                ans = execute(spec, layer, compile_(spec, layer), con=con)
+                assert ans.rows, f"{metric} by {dim} returned nothing"
+                assert ans.query_hash
     finally:
         con.close()
 

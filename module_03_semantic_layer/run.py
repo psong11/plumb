@@ -1,7 +1,5 @@
 """
 Module 03 demo.
-
-    python -m module_03_semantic_layer.run --answers
     python -m module_03_semantic_layer.run
 
 Needs data/silver_events.parquet from Module 02.
@@ -20,12 +18,7 @@ from module_03_semantic_layer.engine import connect, execute
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--answers", action="store_true")
     args = ap.parse_args()
-
-    validate = C._answer_validate_spec  if args.answers else C.validate_spec
-    compile_ = C._answer_compile_spec   if args.answers else C.compile_spec
-    resolve  = C._answer_resolve_metric if args.answers else C.resolve_metric
 
     layer = C.load_semantic_layer()
     con = connect()
